@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+"""scan — syllable count + stress skeleton per line.
+
+With >=2 lines, flag where they won't sing together. Reports what *is*;
+whether a mismatch is wrong is the writer's call.
+
+Usage: scan "<line>" ["<line2>" ...]
+"""
+
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib"))
+import phonetics as ph  # noqa: E402
+
+
+def main():
+    lines = [a for a in sys.argv[1:] if a.strip()]
+    if not lines:
+        sys.stderr.write('scan: need at least one line.\n  scan "<line>" ["<line2>" ...]\n')
+        sys.exit(2)
+
+    scans = [ph.scan_line(line) for line in lines]
+    w = max([len(s["line"]) for s in scans] + [8])
+    for s in scans:
+        note = f'  (guessed: {", ".join(s["unknown_words"])})' if s["unknown"] else ""
+        stress = " ".join(s["stress"])
+        print(f'{s["line"]:<{w}}   {s["syllables"]:>2}σ   {stress}{note}')
+
+    # Compare each line against the first, aligned from the end.
+    if len(scans) >= 2:
+        base = scans[0]
+        flags = []
+        for i in range(1, len(scans)):
+            s = scans[i]
+            if s["syllables"] != base["syllables"]:
+                flags.append(f'  line {i + 1}: {s["syllables"]}σ vs '
+                             f'{base["syllables"]}σ in line 1 — different length')
+                continue
+            clash = 0
+            for k in range(1, len(base["stress"]) + 1):
+                a = base["stress"][-k]
+                b = s["stress"][-k] if k <= len(s["stress"]) else "?"
+                if a != "?" and b != "?" and a != b:
+                    clash += 1
+            if clash:
+                flags.append(f'  line {i + 1}: same length, {clash} stress position(s) fall differently')
+        if flags:
+            print("\nwon't sing identically against line 1:")
+            for f in flags:
+                print(f)
+
+
+if __name__ == "__main__":
+    main()

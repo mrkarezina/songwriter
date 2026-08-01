@@ -1,0 +1,11 @@
+songwriting
+Copyright (c) 2026 Marko Arezina
+
+This product bundles data derived from the CMU Pronouncing Dictionary
+(CMUdict), which is available under a BSD-2-Clause-style license.
+
+  The CMU Pronouncing Dictionary
+  Copyright (C) 1993-2015 Carnegie Mellon University. All rights reserved.
+
+The full license text is retained at data/cmudict.LICENSE and must be kept
+with any redistribution of the data in data/.

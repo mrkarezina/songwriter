@@ -1,0 +1,194 @@
+#!/usr/bin/env python3
+"""skeleton — phonetically valid line scaffolds for a target meter.
+
+Give it a stress pattern and it tiles real words that sing to that meter.
+Optionally pin a vowel sound at a syllable position (e.g. to set up a rhyme).
+
+This is an assist — a spark, not a quality gate. React to the *shape*; the
+words are raw, some will be odd, that's the point. You're the writer.
+
+Usage:
+  skeleton --stress "s u u s u s" [--vowel-at 6=oh] [--limit N]
+
+Stress accepts: s/u, S/x, or 1/0  (e.g. "suusus" or "1 0 0 1 0 1").
+Vowel sounds accept loose spellings (oh, ee, ay, ah, oo, ...) or ARPABET (OW).
+"""
+
+import argparse
+import os
+import random
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib"))
+import phonetics as ph  # noqa: E402
+
+ARPABET_VOWELS = {
+    "AA", "AE", "AH", "AO", "AW", "AY", "EH", "ER", "EY",
+    "IH", "IY", "OW", "OY", "UH", "UW",
+}
+
+# Loose spellings a writer might type -> ARPABET vowel.
+VOWEL_SPELLING = {
+    "oh": "OW", "ow": "OW", "o": "OW",
+    "oo": "UW", "ue": "UW", "u": "UW",
+    "ee": "IY", "ea": "IY", "e": "IY",
+    "ay": "EY", "ai": "EY", "a": "EY",
+    "ah": "AA", "aa": "AA",
+    "aw": "AO", "au": "AO",
+    "eh": "EH",
+    "ih": "IH", "i": "IH",
+    "uh": "AH",
+    "ae": "AE", "at": "AE",
+    "eye": "AY", "y": "AY",
+    "ou": "AW",
+    "oy": "OY", "oi": "OY",
+    "er": "ER", "ur": "ER",
+}
+
+
+def parse_stress(text):
+    text = text.strip().replace(" ", "")
+    out = []
+    for ch in text:
+        if ch in "sS1":
+            out.append("s")
+        elif ch in "uUxX0":
+            out.append("u")
+        else:
+            raise ValueError(f"unrecognized stress mark: {ch!r} (use s/u, S/x, or 1/0)")
+    if not out:
+        raise ValueError("empty stress pattern")
+    return out
+
+
+def parse_vowel(spec):
+    """'6=oh' -> (position_1indexed, ARPABET_VOWEL)."""
+    if "=" not in spec:
+        raise ValueError("--vowel-at wants POS=SOUND, e.g. 6=oh")
+    pos_s, sound = spec.split("=", 1)
+    pos = int(pos_s)
+    sound = sound.strip().upper()
+    if sound in ARPABET_VOWELS:
+        vowel = sound
+    else:
+        vowel = VOWEL_SPELLING.get(sound.lower())
+        if not vowel:
+            raise ValueError(f"don't know vowel sound {sound!r}; try oh/ee/ay/ah/oo or ARPABET like OW")
+    return pos, vowel
+
+
+def word_vowels(phones):
+    return [ph.strip_stress(p) for p in phones if ph.is_vowel_phone(p)]
+
+
+# Non-words the raw corpus ranks as common (fillers, abbreviations, initialisms).
+_SKIP = {"er", "uh", "um", "mm", "hmm", "mc", "os", "ers", "ah", "eh", "oh", "hm"}
+
+
+def build_index(max_piece=4, max_freq=20000):
+    """stress-tuple -> list of (word, vowels_tuple), sorted commonest-first.
+
+    Only real, reasonably common words (frequency rank < max_freq) go in, so the
+    scaffolds read as language a person would actually reach for, not dictionary
+    debris. Words are stored commonest-first so tilings prefer familiar pieces.
+    """
+    index = {}
+    for word, phones in ph._load().items():
+        if not word.isalpha() or word in _SKIP:
+            continue
+        if ph._FREQ.get(word, ph.RARE) >= max_freq:
+            continue
+        pat = tuple(ph.stress_pattern(phones))
+        n = len(pat)
+        if n == 0 or n > max_piece:
+            continue
+        index.setdefault(pat, []).append((word, tuple(word_vowels(phones))))
+    for pat in index:
+        index[pat].sort(key=lambda wv: ph._FREQ.get(wv[0], ph.RARE))
+    return index
+
+
+def tilings(template, index, pin, limit, per_slot=40):
+    """Return up to `limit` distinct word-tilings of the template.
+
+    Each scaffold is an independent randomized build, so they don't all share a
+    prefix — the point is a spread of different shapes to react to.
+    """
+    L = len(template)
+
+    def ok_pin(word_vowels_t, i, length):
+        if pin is None:
+            return True
+        pos0 = pin[0] - 1
+        if i <= pos0 < i + length:
+            return word_vowels_t[pos0 - i] == pin[1]
+        return True
+
+    def one_build(i):
+        """First valid completion from position i under a fresh random order."""
+        if i == L:
+            return []
+        lengths = [1, 2, 3, 4]
+        random.shuffle(lengths)
+        for length in lengths:
+            if i + length > L:
+                continue
+            cands = index.get(tuple(template[i:i + length]))
+            if not cands:
+                continue
+            cands = [(w, vt) for (w, vt) in cands if ok_pin(vt, i, length)]
+            if not cands:
+                continue
+            # commonest-first pool, shuffled for variety without obscure debris
+            pool = cands[:per_slot]
+            random.shuffle(pool)
+            for w, _ in pool:
+                rest = one_build(i + length)
+                if rest is not None:
+                    return [w] + rest
+        return None
+
+    found, seen = [], set()
+    tries = limit * 40
+    for _ in range(tries):
+        if len(found) >= limit:
+            break
+        build = one_build(0)
+        if build and tuple(build) not in seen:
+            seen.add(tuple(build))
+            found.append(build)
+    return found
+
+
+def main():
+    ap = argparse.ArgumentParser(description="phonetically valid line scaffolds for a target meter")
+    ap.add_argument("--stress", required=True, help='target stress, e.g. "s u u s u s"')
+    ap.add_argument("--vowel-at", dest="vowel_at", help="pin a vowel sound at a syllable, e.g. 6=oh")
+    ap.add_argument("--limit", type=int, default=8, help="how many scaffolds (default 8)")
+    args = ap.parse_args()
+
+    try:
+        template = parse_stress(args.stress)
+        pin = parse_vowel(args.vowel_at) if args.vowel_at else None
+    except ValueError as e:
+        ap.error(str(e))
+
+    if pin and not (1 <= pin[0] <= len(template)):
+        ap.error(f"--vowel-at position {pin[0]} is outside the {len(template)}-syllable line")
+
+    index = build_index()
+    scaffolds = tilings(template, index, pin, args.limit)
+
+    grid = " ".join(template)
+    pinned = f"   (syllable {pin[0]} = {pin[1]})" if pin else ""
+    print(f"scaffolds for  {grid}{pinned}")
+    print("  react to the shape — the words are raw sparks, not suggestions\n")
+    if not scaffolds:
+        print("  (no tilings found — try a shorter line or drop the vowel pin)")
+        return
+    for words in scaffolds:
+        print("  " + " ".join(words))
+
+
+if __name__ == "__main__":
+    main()

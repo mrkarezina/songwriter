@@ -1,0 +1,15 @@
+# Session output — the skill writes these into a workspace at runtime.
+# They are a user's creative session, never part of the skill itself.
+/spill.md
+/world.md
+/song.md
+/song.v*.md
+/scratch.md
+/journal.md
+
+# Python
+__pycache__/
+*.py[cod]
+
+# OS
+.DS_Store
