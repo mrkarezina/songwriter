@@ -12,12 +12,12 @@ import unittest
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-BIN = REPO / "bin"
+CLI = REPO / "songwriter"
 
 
-def run(tool, *args):
+def run(cmd, *args):
     result = subprocess.run(
-        ["python3", str(BIN / tool), *args],
+        ["python3", str(CLI), cmd, *args],
         capture_output=True, text=True, check=True,
     )
     return result.stdout

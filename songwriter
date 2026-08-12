@@ -1,0 +1,118 @@
+#!/usr/bin/env python3
+"""songwriter — phonetics for lyrics.
+
+Two commands:
+
+    songwriter rhyme <word> [--against LINE] [--want ...] [--syllables N]
+                            [--multi] [--limit N]
+    songwriter scan "<line>" ["<line2>" ...]
+
+Both report facts — rhyme type, closeness, syllable count, stress — and never
+a verdict. What works is the writer's call.
+"""
+
+import argparse
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
+import phonetics as ph  # noqa: E402
+
+
+def cmd_rhyme(args):
+    target = ph.last_word(" ".join(args.words))
+    if not target:
+        sys.stderr.write("rhyme: need a word or phrase\n")
+        return 2
+
+    if args.against:
+        other = ph.last_word(args.against)
+        r = ph.rhyme_between(target, other, multi=args.multi)
+        if r["closeness"] is None:
+            print(f'{target} / {other}  ->  {r["type"]} '
+                  f'(spelling guess, low confidence — "{r["missing"]}" not in dictionary)')
+        else:
+            print(f'{target} / {other}  ->  {r["type"]}, {r["closeness"]}')
+        return 0
+
+    res = ph.find_rhymes(target, multi=args.multi, syllables=args.syllables,
+                         want=args.want, limit=args.limit)
+    if not res["ok"]:
+        print(f'"{target}" not in dictionary — no reliable phonetics. '
+              f"Try a simpler spelling, or trust your ear.")
+        return 0
+
+    tail = " ".join(res["tail"])
+    multi = "  (multisyllabic)" if args.multi else ""
+    print(f'rhymes for "{target}"  [tail: {tail}]{multi}')
+    if not res["results"]:
+        print("  (none found for these filters)")
+        return 0
+    w = max(len(r["word"]) for r in res["results"])
+    for r in res["results"]:
+        print(f'  {r["word"]:<{w}}   {r["type"]:<10} {r["closeness"]}')
+    return 0
+
+
+def cmd_scan(args):
+    lines = [line for line in args.lines if line.strip()]
+    if not lines:
+        sys.stderr.write('scan: need at least one line\n')
+        return 2
+
+    scans = [ph.scan_line(line) for line in lines]
+    w = max([len(s["line"]) for s in scans] + [8])
+    for s in scans:
+        note = f'  (guessed: {", ".join(s["unknown_words"])})' if s["unknown"] else ""
+        stress = " ".join(s["stress"])
+        print(f'{s["line"]:<{w}}   {s["syllables"]:>2}σ   {stress}{note}')
+
+    # Compare each line against the first, aligned from the end — where
+    # singability is decided.
+    if len(scans) < 2:
+        return 0
+    base = scans[0]
+    flags = []
+    for i, s in enumerate(scans[1:], start=2):
+        if s["syllables"] != base["syllables"]:
+            flags.append(f'  line {i}: {s["syllables"]}σ vs '
+                         f'{base["syllables"]}σ in line 1 — different length')
+            continue
+        clash = 0
+        for k in range(1, len(base["stress"]) + 1):
+            a = base["stress"][-k]
+            b = s["stress"][-k] if k <= len(s["stress"]) else "?"
+            if a != "?" and b != "?" and a != b:
+                clash += 1
+        if clash:
+            flags.append(f'  line {i}: same length, {clash} stress position(s) fall differently')
+    if flags:
+        print("\nwon't sing identically against line 1:")
+        for f in flags:
+            print(f)
+    return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="songwriter", description="phonetics for lyrics")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    r = sub.add_parser("rhyme", help="rhyme candidates and relationships")
+    r.add_argument("words", nargs="+", help="word or phrase (rhymes on the last word)")
+    r.add_argument("--against", metavar="LINE", help="classify against the last word of this line")
+    r.add_argument("--want", choices=["perfect", "family", "slant"], help="filter by rhyme type")
+    r.add_argument("--syllables", type=int, help="only candidates with N syllables")
+    r.add_argument("--multi", action="store_true", help="multisyllabic rhyme (from 2nd-to-last stress)")
+    r.add_argument("--limit", type=int, default=40)
+    r.set_defaults(fn=cmd_rhyme)
+
+    s = sub.add_parser("scan", help="syllable count + stress skeleton per line")
+    s.add_argument("lines", nargs="+", metavar="LINE")
+    s.set_defaults(fn=cmd_scan)
+
+    args = ap.parse_args()
+    sys.exit(args.fn(args))
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>threads</title>
+
+<!--
+  threads.html — the ideas, and the picture of them.
+
+  One file. No build step, no server, nothing fetched. All the data lives in the
+  <script id="graph"> block below, so this works opened from disk, dragged into
+  a chat, or rendered in a sandbox.
+
+  Claude edits the JSON block. The page never writes anything — clicking a node
+  copies context to your clipboard, and you paste it back into the chat.
+-->
+
+<script id="graph" type="application/json">
+{
+  "threads": [],
+  "nodes": [],
+  "links": []
+}
+</script>
+
+<!--
+  The shape of it:
+
+  threads  { "id": "t1", "title": "the drive home", "note": "why it started" }
+  nodes    { "id": "n1", "thread": "t1", "kind": "detail",
+             "text": "radio was off", "from": ["n0"] }
+  links    { "a": "n3", "b": "n9", "why": "same silence" }
+
+  "from" is parentage — that's the shape of the thread. "links" are sideways
+  connections between anything, including across threads.
+  "kind" is one of: seed · idea · detail · question · line
+-->
+
+<style>
+:root {
+  --bg:      #17191a;
+  --panel:   #1e2224;
+  --rule:    #303638;
+  --ink:     #e8e3d9;
+  --faint:   #7d8688;
+
+  --seed:     #d9a441;
+  --idea:     #7fa8d6;
+  --detail:   #74b58c;
+  --question: #dd6a5c;
+  --line:     #cfc6b4;
+
+  --hand: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --ui:   -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; height: 100%; overflow: hidden;
+  background: var(--bg); color: var(--ink); font-family: var(--ui);
+}
+
+#app { display: flex; flex-direction: column; height: 100%; }
+
+header {
+  border-bottom: 1px solid var(--rule);
+  padding: 12px 18px;
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+}
+h1 {
+  margin: 0; font-size: 11px; font-weight: 600;
+  letter-spacing: .16em; text-transform: uppercase; color: var(--faint);
+}
+
+#threads { display: flex; gap: 8px; flex-wrap: wrap; flex: 1; }
+.chip {
+  font-family: var(--hand); font-size: 14px;
+  background: var(--panel); color: var(--ink);
+  border: 1px solid var(--rule); border-radius: 999px;
+  padding: 4px 12px; cursor: pointer;
+}
+.chip:hover { border-color: var(--faint); }
+.chip .n { color: var(--faint); font-size: 11px; margin-left: 6px; }
+
+#key { display: flex; gap: 12px; align-items: center; }
+#key span { font-size: 10px; color: var(--faint); letter-spacing: .04em; }
+#key i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; }
+
+button.plain {
+  background: none; border: 1px solid var(--rule); border-radius: 4px;
+  color: var(--faint); font-size: 11px; padding: 4px 9px; cursor: pointer;
+}
+button.plain:hover { color: var(--ink); border-color: var(--faint); }
+
+#stage { position: relative; flex: 1; overflow: hidden; }
+svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+.edge      { stroke: #3c4446; stroke-width: 1.4; }
+.edge.link { stroke: #4d4356; stroke-dasharray: 3 4; }
+
+.thread-label {
+  font-family: var(--hand); font-size: 19px; fill: #ffffff;
+  opacity: .09; pointer-events: none;
+}
+
+.node { cursor: pointer; }
+.node .hit  { fill: transparent; }
+.node .body { stroke: var(--bg); stroke-width: 2; }
+.node:hover .body { stroke: var(--ink); }
+.node.sel   .body { stroke: var(--ink); stroke-width: 2.5; }
+.node text {
+  font-family: var(--hand); font-size: 13px; fill: var(--ink);
+  pointer-events: none; paint-order: stroke;
+  stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round;
+}
+
+#empty {
+  position: absolute; inset: 0; display: flex;
+  align-items: center; justify-content: center; text-align: center;
+  font-family: var(--hand); font-size: 16px; line-height: 1.8; color: var(--faint);
+  pointer-events: none;
+}
+
+#toast {
+  position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%);
+  max-width: min(680px, 90vw);
+  background: var(--panel); border: 1px solid var(--rule); border-radius: 6px;
+  padding: 11px 15px; font-size: 12px; line-height: 1.55;
+  opacity: 0; transition: opacity .18s; pointer-events: none;
+}
+#toast.on { opacity: 1; pointer-events: auto; }
+#toast b { color: var(--seed); }
+#toast pre {
+  margin: 7px 0 0; font-size: 11px; color: var(--faint);
+  white-space: pre-wrap; max-height: 190px; overflow: auto;
+  user-select: text; -webkit-user-select: text;
+}
+</style>
+</head>
+
+<body>
+<div id="app">
+  <header>
+    <h1>Threads</h1>
+    <div id="threads"></div>
+    <div id="key"></div>
+    <button class="plain" id="shake">re-layout</button>
+  </header>
+  <div id="stage">
+    <svg><g id="labels"></g><g id="edges"></g><g id="nodes"></g></svg>
+    <div id="empty"></div>
+    <div id="toast"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* --- config ------------------------------------------------------------- */
+const CFG = {
+  repel: 5600,       // node-to-node push
+  spring: 0.013,     // edge pull
+  restLength: 128,   // length an edge relaxes towards
+  centering: 0.0016,
+  damping: 0.86,
+  radius: 8,
+  labelWidth: 24,    // characters before a label wraps
+};
+
+const KINDS = ["seed", "idea", "detail", "question", "line"];
+
+const GRAPH = JSON.parse(document.getElementById("graph").textContent);
+const NODES = GRAPH.nodes || [];
+const THREADS = GRAPH.threads || [];
+const LINKS = GRAPH.links || [];
+
+const $ = s => document.querySelector(s);
+const svgEl = (tag, attrs) => {
+  const n = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const k in (attrs || {})) n.setAttribute(k, attrs[k]);
+  return n;
+};
+const color = kind => getComputedStyle(document.documentElement)
+  .getPropertyValue("--" + kind).trim() || "#8b9496";
+
+/* --- lookups ------------------------------------------------------------ */
+const byId = new Map(NODES.map(n => [n.id, n]));
+const threadById = new Map(THREADS.map(t => [t.id, t]));
+
+function parents(n) {
+  return (n.from || []).map(id => byId.get(id)).filter(Boolean);
+}
+
+/* Root-to-node chain, following the first parent at each step. */
+function ancestry(node) {
+  const chain = [];
+  const seen = new Set();
+  let cur = node;
+  while (cur && !seen.has(cur.id)) {
+    seen.add(cur.id);
+    chain.unshift(cur);
+    cur = parents(cur)[0];
+  }
+  return chain;
+}
+
+function linksFor(id) {
+  return LINKS
+    .map(l => l.a === id ? { other: l.b, why: l.why }
+            : l.b === id ? { other: l.a, why: l.why } : null)
+    .filter(Boolean)
+    .map(x => ({ node: byId.get(x.other), why: x.why }))
+    .filter(x => x.node);
+}
+
+/* --- clipboard -----------------------------------------------------------
+   navigator.clipboard needs a secure context, which a file:// page is not, so
+   fall back to the hidden-textarea trick rather than failing silently. */
+async function copy(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (e) { /* fall through */ }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.cssText = "position:fixed;top:-1000px;opacity:0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  } catch (e) { return false; }
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+}
+
+async function handOff(text) {
+  const ok = await copy(text);
+  const box = $("#toast");
+  box.innerHTML = ok
+    ? "Copied. <b>Paste it into the chat</b> and say what you want next."
+    : "Couldn't reach the clipboard — copy this by hand:";
+  const pre = document.createElement("pre");
+  pre.textContent = text;
+  box.appendChild(pre);
+  box.classList.add("on");
+  clearTimeout(handOff.t);
+  handOff.t = setTimeout(() => box.classList.remove("on"), ok ? 6000 : 20000);
+}
+
+/* --- what lands on the clipboard ---------------------------------------- */
+function nodeContext(node) {
+  const t = threadById.get(node.thread);
+  const out = [];
+  out.push("thread: " + (t ? t.title : node.thread || "—"));
+  for (const step of ancestry(node)) {
+    if (step.id === node.id) break;
+    out.push("  > " + step.text);
+  }
+  out.push("node: " + node.text + " [" + (node.kind || "idea") + "]");
+  for (const l of linksFor(node.id)) {
+    out.push("near: " + l.node.text + (l.why ? " — " + l.why : ""));
+  }
+  out.push("");
+  return out.join("\n");
+}
+
+function threadOutline(thread) {
+  const mine = NODES.filter(n => n.thread === thread.id);
+  const kids = new Map(mine.map(n => [n.id, []]));
+  const roots = [];
+  for (const n of mine) {
+    const p = parents(n).find(p => kids.has(p.id));
+    if (p) kids.get(p.id).push(n); else roots.push(n);
+  }
+  const out = ["thread: " + thread.title];
+  if (thread.note) out.push("(" + thread.note + ")");
+  out.push("");
+  const walk = (n, depth) => {
+    out.push("  ".repeat(depth) + "- " + n.text + " [" + (n.kind || "idea") + "]");
+    for (const k of kids.get(n.id) || []) walk(k, depth + 1);
+  };
+  for (const r of roots) walk(r, 0);
+  out.push("");
+  return out.join("\n");
+}
+
+/* --- layout -------------------------------------------------------------
+   A small spring/repulsion simulation. Threads are separate connected
+   components, so they drift apart on their own. */
+const sim = new Map();
+let alpha = 1;
+
+function seedPositions() {
+  const box = $("#stage").getBoundingClientRect();
+  const cx = box.width / 2, cy = box.height / 2;
+  NODES.forEach((n, i) => {
+    const a = (i / Math.max(NODES.length, 1)) * Math.PI * 2;
+    sim.set(n.id, {
+      x: cx + Math.cos(a) * (140 + (i % 3) * 45),
+      y: cy + Math.sin(a) * (140 + (i % 3) * 45),
+      vx: 0, vy: 0,
+    });
+  });
+  alpha = 1;
+}
+
+function edgePairs() {
+  const pairs = [];
+  for (const n of NODES) for (const p of parents(n)) pairs.push([p.id, n.id, "from"]);
+  for (const l of LINKS) if (byId.has(l.a) && byId.has(l.b)) pairs.push([l.a, l.b, "link"]);
+  return pairs;
+}
+const EDGES = edgePairs();
+
+function step() {
+  if (NODES.length) {
+    const box = $("#stage").getBoundingClientRect();
+    const cx = box.width / 2, cy = box.height / 2;
+    const pts = NODES.map(n => sim.get(n.id)).filter(Boolean);
+
+    for (let i = 0; i < pts.length; i++) {
+      for (let j = i + 1; j < pts.length; j++) {
+        const a = pts[i], b = pts[j];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const d2 = dx * dx + dy * dy || 0.01;
+        const d = Math.sqrt(d2);
+        const f = CFG.repel / d2;
+        const fx = (dx / d) * f, fy = (dy / d) * f;
+        a.vx -= fx; a.vy -= fy; b.vx += fx; b.vy += fy;
+      }
+    }
+
+    for (const [ai, bi] of EDGES) {
+      const a = sim.get(ai), b = sim.get(bi);
+      if (!a || !b) continue;
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const d = Math.hypot(dx, dy) || 0.01;
+      const f = (d - CFG.restLength) * CFG.spring;
+      const fx = (dx / d) * f, fy = (dy / d) * f;
+      a.vx += fx; a.vy += fy; b.vx -= fx; b.vy -= fy;
+    }
+
+    for (const p of pts) {
+      if (p.held) { p.vx = p.vy = 0; continue; }
+      p.vx += (cx - p.x) * CFG.centering;
+      p.vy += (cy - p.y) * CFG.centering;
+      p.vx *= CFG.damping; p.vy *= CFG.damping;
+      p.x += p.vx * alpha; p.y += p.vy * alpha;
+    }
+    place();
+  }
+  if (alpha > 0.02) alpha *= 0.985;
+  requestAnimationFrame(step);
+}
+
+function place() {
+  for (const g of document.querySelectorAll("#nodes .node")) {
+    const p = sim.get(g.dataset.id);
+    if (p) g.setAttribute("transform", `translate(${p.x},${p.y})`);
+  }
+  for (const l of document.querySelectorAll("#edges line")) {
+    const a = sim.get(l.dataset.a), b = sim.get(l.dataset.b);
+    if (!a || !b) continue;
+    l.setAttribute("x1", a.x); l.setAttribute("y1", a.y);
+    l.setAttribute("x2", b.x); l.setAttribute("y2", b.y);
+  }
+  for (const t of document.querySelectorAll("#labels text")) {
+    const p = sim.get(t.dataset.anchor);
+    if (p) { t.setAttribute("x", p.x); t.setAttribute("y", p.y - 34); }
+  }
+}
+
+/* --- drawing ------------------------------------------------------------ */
+function wrap(text, width) {
+  const words = String(text).split(/\s+/);
+  const rows = [];
+  let row = "";
+  for (const w of words) {
+    if ((row + " " + w).trim().length > width && row) { rows.push(row); row = w; }
+    else row = (row ? row + " " : "") + w;
+    if (rows.length === 2) break;
+  }
+  if (row && rows.length < 2) rows.push(row);
+  if (rows.length === 2 && words.join(" ").length > rows.join(" ").length) rows[1] += "…";
+  return rows;
+}
+
+function draw() {
+  const gn = $("#nodes"), ge = $("#edges"), gl = $("#labels");
+  gn.textContent = ""; ge.textContent = ""; gl.textContent = "";
+
+  $("#empty").innerHTML = NODES.length ? "" :
+    "Nothing here yet.<br>Tell Claude what you want to write about —<br>or ask it for somewhere to start.";
+
+  for (const [a, b, kind] of EDGES) {
+    const l = svgEl("line", { class: "edge" + (kind === "link" ? " link" : "") });
+    l.dataset.a = a; l.dataset.b = b;
+    ge.appendChild(l);
+  }
+
+  // One faint title per thread, floating above that thread's first node.
+  for (const t of THREADS) {
+    const first = NODES.find(n => n.thread === t.id);
+    if (!first) continue;
+    const el = svgEl("text", { class: "thread-label", "text-anchor": "middle" });
+    el.dataset.anchor = first.id;
+    el.textContent = t.title;
+    gl.appendChild(el);
+  }
+
+  for (const n of NODES) {
+    const kind = KINDS.includes(n.kind) ? n.kind : "idea";
+    const r = kind === "seed" ? CFG.radius + 3 : CFG.radius;
+    const g = svgEl("g", { class: "node" });
+    g.dataset.id = n.id;
+    g.appendChild(svgEl("circle", { class: "hit", r: 28 }));
+
+    const body = svgEl("circle", { class: "body", r });
+    body.style.fill = color(kind);
+    g.appendChild(body);
+
+    const tip = svgEl("title");
+    tip.textContent = n.text + "   [" + kind + " · " + n.id + "]";
+    g.appendChild(tip);
+
+    wrap(n.text, CFG.labelWidth).forEach((row, i) => {
+      const t = svgEl("text", { x: 0, y: r + 16 + i * 15, "text-anchor": "middle" });
+      t.textContent = row;
+      g.appendChild(t);
+    });
+
+    g.addEventListener("pointerdown", onGrab);
+    gn.appendChild(g);
+  }
+  place();
+}
+
+function drawChrome() {
+  const box = $("#threads");
+  box.textContent = "";
+  for (const t of THREADS) {
+    const count = NODES.filter(n => n.thread === t.id).length;
+    const b = document.createElement("button");
+    b.className = "chip";
+    b.innerHTML = esc(t.title) + '<span class="n">' + count + "</span>";
+    b.title = "copy this whole thread";
+    b.onclick = () => handOff(threadOutline(t));
+    box.appendChild(b);
+  }
+
+  const key = $("#key");
+  key.textContent = "";
+  const used = KINDS.filter(k => NODES.some(n => (n.kind || "idea") === k));
+  for (const k of used) {
+    const s = document.createElement("span");
+    s.innerHTML = '<i style="background:' + color(k) + '"></i>' + k;
+    key.appendChild(s);
+  }
+}
+
+/* --- interaction -------------------------------------------------------- */
+let drag = null;
+
+function onGrab(e) {
+  const g = e.currentTarget;
+  const p = sim.get(g.dataset.id);
+  if (!p) return;
+  const box = $("#stage").getBoundingClientRect();
+  drag = { id: g.dataset.id, moved: false, ox: e.clientX - box.left - p.x, oy: e.clientY - box.top - p.y };
+  p.held = true;
+  g.setPointerCapture(e.pointerId);
+  e.preventDefault();
+}
+
+window.addEventListener("pointermove", e => {
+  if (!drag) return;
+  const p = sim.get(drag.id);
+  const box = $("#stage").getBoundingClientRect();
+  const nx = e.clientX - box.left - drag.ox, ny = e.clientY - box.top - drag.oy;
+  if (Math.hypot(nx - p.x, ny - p.y) > 2) drag.moved = true;
+  p.x = nx; p.y = ny;
+  place();
+});
+
+window.addEventListener("pointerup", () => {
+  if (!drag) return;
+  const p = sim.get(drag.id);
+  if (p) p.held = false;
+  if (!drag.moved) {
+    const node = byId.get(drag.id);
+    if (node) {
+      document.querySelectorAll(".node.sel").forEach(el => el.classList.remove("sel"));
+      document.querySelector('.node[data-id="' + CSS.escape(node.id) + '"]').classList.add("sel");
+      handOff(nodeContext(node));
+    }
+  }
+  alpha = Math.max(alpha, 0.25);
+  drag = null;
+});
+
+$("#shake").onclick = () => { seedPositions(); };
+window.addEventListener("resize", () => { alpha = Math.max(alpha, 0.4); });
+
+/* --- go ------------------------------------------------------------------ */
+drawChrome();
+seedPositions();
+draw();
+step();
+</script>
+</body>
+</html>
