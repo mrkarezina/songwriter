@@ -34,7 +34,10 @@
 
   "from" is parentage — that's the shape of the thread. "links" are sideways
   connections between anything, including across threads.
-  "kind" is one of: seed · idea · detail · question · line
+  "kind" is one of: seed · idea · detail · question
+
+  Raw material only. Lyrics never go in here — this is what the song gets made
+  out of, not the song.
 -->
 
 <style>
@@ -49,7 +52,6 @@
   --idea:     #7fa8d6;
   --detail:   #74b58c;
   --question: #dd6a5c;
-  --line:     #cfc6b4;
 
   --hand: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   --ui:   -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
@@ -168,7 +170,7 @@ const CFG = {
   labelWidth: 24,    // characters before a label wraps
 };
 
-const KINDS = ["seed", "idea", "detail", "question", "line"];
+const KINDS = ["seed", "idea", "detail", "question"];
 
 const GRAPH = JSON.parse(document.getElementById("graph").textContent);
 const NODES = GRAPH.nodes || [];

@@ -4,3 +4,6 @@ __pycache__/
 
 # OS
 .DS_Store
+
+# Songs you write with it. Yours, not the skill's.
+/output/

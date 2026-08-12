@@ -1,6 +1,11 @@
 # Craft — rhyme types and reading the tool
 
-Load when drafting or revising lines.
+Load when revising lines that already exist.
+
+## When to reach for this
+
+Last, once the lines exist. Never let a rhyme candidate choose the meaning — if
+the honest word doesn't rhyme, the honest word wins.
 
 ## Two rules
 

@@ -11,9 +11,13 @@ Ask for concrete, sensory things: what was in the room, what it smelled like,
 what time it was, who else was there. Not "how did that make you feel." The
 feeling arrives on its own once the details are real.
 
-Offer 3–5 options so there's something to react to, and always leave the door
-open to write their own. Options should be specific enough to be wrong — "the
+Offer 3–5 options every time, so there's something to react to. Say they can
+pick more than one, and always leave the door open to write their own — every
+turn, not just the first. Options should be specific enough to be wrong: "the
 kitchen at 2am" is useful, "a place you remember" is not.
+
+When they pick several, that's information — the overlap between their picks is
+usually what the thread is really about.
 
 ## What to follow
 
