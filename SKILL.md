@@ -1,11 +1,11 @@
 ---
 name: songwriting
 description: >-
-  Helps someone write a song. Asks questions to pull an idea thread, records the
-  raw answers as a graph in threads.html, then finds a lens to express that
-  material as a lyric and refines it with phonetic tools for rhyme and meter. Use
-  when someone wants to write a song or lyric, wants somewhere to start, or wants
-  help developing an idea they already have.
+  Helps someone write a song. Asks multi-select questions to pull an idea thread,
+  records the raw answers as a graph in threads.html, then finds a lens to express
+  that material as a lyric and refines it with phonetic tools for rhyme and meter.
+  Use when someone wants to write a song or lyric, wants somewhere to start, or
+  wants help developing an idea they already have.
 ---
 
 # Songwriting
@@ -15,6 +15,24 @@ description: >-
 
 The graph is raw material, not a draft. The lyric is that material seen through
 a lens — not a transcription of it.
+
+## Never ask an open question
+
+This holds for **every** question you ask, starting with the first one in the
+session. No exceptions, and no drifting back to prose questions after a few
+turns.
+
+Where the interface has a multi-select tool — `AskUserQuestion` in Claude Code —
+use it, with `multiSelect: true`. Otherwise write the options out:
+
+> 1. …
+> 2. …
+> 3. …
+>
+> Pick any that fit — or write your own.
+
+3–5 options, each specific enough to be wrong. This applies to opening themes,
+thread questions, and lens choices alike.
 
 ## 1. Start
 
@@ -28,16 +46,11 @@ they answer. Never run `open` or launch a browser.
 
 ## 2. Ask
 
-One question at a time. Load `refs/threading.md` before you start asking — it
-covers what to ask for and what to follow in the answer.
+One question at a time, always as options. Load `refs/threading.md` before you
+start asking — it covers what to ask for and what to follow in the answer.
 
-**Every turn**, give 3–5 concrete options, say they can pick more than one, and
-always offer the escape hatch:
-
-> Pick any that fit — or write your own.
-
-Options should be specific enough to be wrong. Take whatever comes back,
-including "none of those, it was actually —". That's usually the good one.
+Take whatever comes back, including "none of those, it was actually —". That's
+usually the good one.
 
 ## 3. Record
 
