@@ -1,7 +1,7 @@
 # songwriter
 
-A skill for writing songs. The agent asks questions, follows the thread, and
-keeps the answers in a graph you can look at.
+An agent skill for writing songs. The agent asks questions, follows the thread,
+and keeps the answers in a graph you can look at.
 
 Drop this folder into an agent session and say what you want to write about —
 or ask for somewhere to start.
