@@ -1,10 +1,10 @@
 # songwriter
 
-A Claude skill for writing songs. Claude asks questions, follows the thread, and
+A skill for writing songs. The agent asks questions, follows the thread, and
 keeps the answers in a graph you can look at.
 
-Drop this folder into a Claude session (Desktop, or `claude` in this directory)
-and say what you want to write about — or ask for somewhere to start.
+Drop this folder into an agent session and say what you want to write about —
+or ask for somewhere to start.
 
 ## How it works
 
@@ -43,8 +43,8 @@ line exists.
 
 ## The graph
 
-`threads.html` — Claude shows it as a preview in the session and updates it as
-you answer, so you watch the thread grow. You can also open it in any browser.
+`threads.html` — the agent shows it as a preview in the session and updates it
+as you answer, so you watch the thread grow. You can also open it in any browser.
 All the data lives in a JSON block at the top of the file; nothing to install,
 nothing to run.
 

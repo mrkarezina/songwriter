@@ -12,7 +12,7 @@
   <script id="graph"> block below, so this works opened from disk, dragged into
   a chat, or rendered in a sandbox.
 
-  Claude edits the JSON block. The page never writes anything — clicking a node
+  The agent edits the JSON block. The page never writes anything — clicking a node
   copies context to your clipboard, and you paste it back into the chat.
 -->
 
@@ -399,7 +399,7 @@ function draw() {
   gn.textContent = ""; ge.textContent = ""; gl.textContent = "";
 
   $("#empty").innerHTML = NODES.length ? "" :
-    "Nothing here yet.<br>Tell Claude what you want to write about —<br>or ask it for somewhere to start.";
+    "Nothing here yet.<br>Say what you want to write about —<br>or ask for somewhere to start.";
 
   for (const [a, b, kind] of EDGES) {
     const l = svgEl("line", { class: "edge" + (kind === "link" ? " link" : "") });

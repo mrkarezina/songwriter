@@ -22,8 +22,8 @@ This holds for **every** question you ask, starting with the first one in the
 session. No exceptions, and no drifting back to prose questions after a few
 turns.
 
-Where the interface has a multi-select tool — `AskUserQuestion` in Claude Code —
-use it, with `multiSelect: true`. Otherwise write the options out:
+Where the interface has a multi-select tool (`AskUserQuestion`, or equivalent),
+use it, with multi-select on. Otherwise write the options out:
 
 > 1. …
 > 2. …
